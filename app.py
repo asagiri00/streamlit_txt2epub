@@ -17,16 +17,28 @@ st.set_page_config(
     layout="wide"
 )
 
-# CSS 스타일링
+# CSS 스타일링 - 다크모드 대응
 st.markdown("""
 <style>
+    /* 진행바 색상 */
     .stProgress > div > div > div > div {
         background-color: #4CAF50;
     }
+    
+    /* 업로드 텍스트 */
     .upload-text {
         font-size: 1.2em;
         color: #666;
     }
+    
+    /* 다크모드 대응 */
+    @media (prefers-color-scheme: dark) {
+        .upload-text {
+            color: #aaa;
+        }
+    }
+    
+    /* 성공 메시지 박스 */
     .success-box {
         padding: 1rem;
         border-radius: 0.5rem;
@@ -34,18 +46,122 @@ st.markdown("""
         border: 1px solid #c3e6cb;
         color: #155724;
     }
+    
+    /* 다크모드 성공 메시지 */
+    @media (prefers-color-scheme: dark) {
+        .success-box {
+            background-color: #1e3a2a;
+            border-color: #2d6a4f;
+            color: #a7f3d0;
+        }
+    }
+    
+    /* 파일 목록 컨테이너 */
     .file-list {
         max-height: 300px;
         overflow-y: auto;
         border: 1px solid #ddd;
         padding: 10px;
         border-radius: 5px;
+        background-color: #ffffff;
     }
+    
+    /* 다크모드 파일 목록 */
+    @media (prefers-color-scheme: dark) {
+        .file-list {
+            background-color: #1e1e1e;
+            border-color: #444;
+            color: #e0e0e0;
+        }
+    }
+    
+    /* 통계 카드 - 다크모드 대응 */
     .stat-card {
-        background-color: #f0f2f6;
         padding: 1rem;
         border-radius: 0.5rem;
         text-align: center;
+        background-color: #f0f2f6;
+        color: #31333F;
+        border: 1px solid #e0e0e0;
+    }
+    
+    /* 다크모드 통계 카드 */
+    @media (prefers-color-scheme: dark) {
+        .stat-card {
+            background-color: #262730;
+            color: #fafafa;
+            border-color: #404040;
+        }
+        
+        .stat-card h3, .stat-card h4, .stat-card p {
+            color: #fafafa !important;
+        }
+    }
+    
+    /* 정보 메시지 박스 - 다크모드 대응 */
+    .info-box {
+        padding: 0.75rem;
+        border-radius: 0.25rem;
+        background-color: #e7f3ff;
+        border: 1px solid #b8daff;
+        color: #004085;
+    }
+    
+    @media (prefers-color-scheme: dark) {
+        .info-box {
+            background-color: #1e3a5f;
+            border-color: #2d5a8a;
+            color: #b8daff;
+        }
+    }
+    
+    /* 경고 메시지 박스 - 다크모드 대응 */
+    .warning-box {
+        padding: 0.75rem;
+        border-radius: 0.25rem;
+        background-color: #fff3cd;
+        border: 1px solid #ffeeba;
+        color: #856404;
+    }
+    
+    @media (prefers-color-scheme: dark) {
+        .warning-box {
+            background-color: #3a3a1e;
+            border-color: #5a5a2d;
+            color: #ffd966;
+        }
+    }
+    
+    /* 파일 목록 텍스트 - 다크모드 대응 */
+    .file-list-item {
+        padding: 4px 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    
+    @media (prefers-color-scheme: dark) {
+        .file-list-item {
+            border-bottom-color: #333;
+        }
+    }
+    
+    /* 다운로드 버튼 컨테이너 */
+    .download-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 10px;
+        margin-top: 20px;
+    }
+    
+    /* 스트림릿 기본 컴포넌트 다크모드 대응 */
+    @media (prefers-color-scheme: dark) {
+        .stText, .stMarkdown, .stSubheader {
+            color: #fafafa;
+        }
+        
+        /* 사이드바 텍스트 색상 */
+        .css-1d391kg, .css-163ttbj, .css-1v3fvcr {
+            color: #fafafa;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -54,9 +170,22 @@ st.markdown("""
 # 상수 정의
 # -------------------------
 MAX_FILE_SIZE = 200 * 1024 * 1024  # 200MB
-MAX_TOTAL_SIZE = 1024 * 1024 * 1024  # 1GB (안전을 위한 전체 용량 제한)
-RIDI_FONT_PATH = "RIDIBatang.otf"
+MAX_TOTAL_SIZE = 1024 * 1024 * 1024  # 1GB
 ALLOWED_IMAGE_TYPES = ["jpg", "jpeg", "png"]
+
+# 폰트 설정
+FONTS = {
+    "나눔고딕": {
+        "file": "NanumGothic.ttf",
+        "css_name": "NanumGothic",
+        "family": "'NanumGothic', sans-serif"
+    },
+    "리디바탕": {
+        "file": "RIDIBatang.otf",
+        "css_name": "RIDIBatang",
+        "family": "'RIDIBatang', serif"
+    }
+}
 
 # -------------------------
 # 유틸리티 함수
@@ -70,6 +199,13 @@ def format_size(size_bytes):
         return f"{size_bytes/1024:.1f} KB"
     else:
         return f"{size_bytes/(1024*1024):.1f} MB"
+
+def check_font_available(font_key):
+    """폰트 파일 존재 여부 확인"""
+    font_info = FONTS.get(font_key)
+    if font_info:
+        return os.path.exists(font_info["file"])
+    return False
 
 def extract_metadata(filename):
     """파일명에서 제목과 저자 추출"""
@@ -122,7 +258,7 @@ def detect_chapters(lines):
     
     return chapters if chapters else [("본문", [html.escape(l.strip()) for l in lines if l.strip()])]
 
-def build_single_epub(file_name, file_content, cover_image=None, use_chapter_split=True, font_type="리디바탕"):
+def build_single_epub(file_name, file_content, cover_image=None, use_chapter_split=True, selected_font="나눔고딕"):
     """단일 TXT 파일을 EPUB으로 변환"""
     try:
         epub_stream = io.BytesIO()
@@ -132,7 +268,11 @@ def build_single_epub(file_name, file_content, cover_image=None, use_chapter_spl
         title, author, safe_title = extract_metadata(file_name)
         
         # 폰트 설정
-        embed_font = (font_type == "리디바탕" and os.path.exists(RIDI_FONT_PATH))
+        font_info = FONTS.get(selected_font, FONTS["나눔고딕"])
+        font_file = font_info["file"]
+        font_css_name = font_info["css_name"]
+        font_family = font_info["family"]
+        embed_font = os.path.exists(font_file)
         
         # 텍스트 인코딩 감지 및 디코딩
         try:
@@ -152,11 +292,11 @@ def build_single_epub(file_name, file_content, cover_image=None, use_chapter_spl
         # CSS 내용
         css_content = f'''
         @font-face {{
-            font-family: 'RIDIBatang';
-            src: url('fonts/{RIDI_FONT_PATH}');
+            font-family: '{font_css_name}';
+            src: url('fonts/{font_file}');
         }}
-        body {{
-            font-family: {'"RIDIBatang", serif' if embed_font else 'serif'};
+        body {{ 
+            font-family: {font_family if embed_font else 'serif'};
             line-height: 1.8;
             margin: 5% 8%;
             text-align: justify;
@@ -202,8 +342,8 @@ def build_single_epub(file_name, file_content, cover_image=None, use_chapter_spl
             
             # 폰트 추가
             if embed_font:
-                with open(RIDI_FONT_PATH, "rb") as f:
-                    zf.writestr(f"OEBPS/fonts/{RIDI_FONT_PATH}", f.read())
+                with open(font_file, "rb") as f:
+                    zf.writestr(f"OEBPS/fonts/{font_file}", f.read())
             
             # CSS 추가
             zf.writestr("OEBPS/style.css", css_content)
@@ -306,7 +446,7 @@ def build_single_epub(file_name, file_content, cover_image=None, use_chapter_spl
             zf.writestr("OEBPS/toc.ncx", ncx)
             
             # 폰트 manifest 항목
-            font_item = f'\n        <item id="font" href="fonts/{RIDI_FONT_PATH}" media-type="application/vnd.ms-opentype"/>' if embed_font else ""
+            font_item = f'\n        <item id="font" href="fonts/{font_file}" media-type="application/vnd.ms-opentype"/>' if embed_font else ""
             
             # content.opf
             opf = f'''<?xml version="1.0" encoding="utf-8"?>
@@ -335,7 +475,7 @@ def build_single_epub(file_name, file_content, cover_image=None, use_chapter_spl
         st.error(f"'{file_name}' 변환 중 오류 발생: {str(e)}")
         return None
 
-def convert_all_files(files_data, cover_image=None, use_chapter_split=True, font_type="리디바탕"):
+def convert_all_files(files_data, cover_image=None, use_chapter_split=True, selected_font="나눔고딕"):
     """여러 파일을 각각 EPUB으로 변환"""
     converted_files = []
     total_files = len(files_data)
@@ -349,7 +489,7 @@ def convert_all_files(files_data, cover_image=None, use_chapter_split=True, font
         
         # 단일 파일 변환 (첫 번째 파일에만 표지 적용)
         current_cover = cover_image if idx == 0 and cover_image else None
-        result = build_single_epub(file_name, file_content, current_cover, use_chapter_split, font_type)
+        result = build_single_epub(file_name, file_content, current_cover, use_chapter_split, selected_font)
         
         if result:
             converted_files.append(result)
@@ -390,18 +530,41 @@ st.markdown('<p class="upload-text">여러 TXT 파일을 각각 EPUB 전자책�
 with st.sidebar:
     st.header("⚙️ 변환 설정")
     
-    # 폰트 설정
+    # 폰트 선택
+    available_fonts = []
+    font_status = {}
+    
+    for font_name, font_info in FONTS.items():
+        if os.path.exists(font_info["file"]):
+            available_fonts.append(font_name)
+            font_status[font_name] = "✅"
+        else:
+            font_status[font_name] = "❌"
+    
+    # 폰트 선택 UI
     col1, col2 = st.columns([1, 2])
     with col1:
         st.markdown("**폰트:**")
     with col2:
-        font_available = os.path.exists(RIDI_FONT_PATH)
-        if font_available:
-            st.success("리디바탕")
-            font_type = "리디바탕"
+        if available_fonts:
+            selected_font = st.selectbox(
+                "폰트 선택",
+                options=available_fonts,
+                index=0 if "나눔고딕" in available_fonts else 0,
+                label_visibility="collapsed"
+            )
         else:
-            st.warning("기본 폰트")
-            font_type = "기본"
+            st.warning("사용 가능한 폰트가 없습니다.")
+            selected_font = "나눔고딕"
+    
+    # 폰트 상태 표시
+    for font_name, status in font_status.items():
+        if status == "✅":
+            st.success(f"{status} {font_name}")
+        else:
+            st.error(f"{status} {font_name} (파일 없음)")
+    
+    st.divider()
     
     # 챕터 분할 설정
     use_chapter_split = st.checkbox("자동 챕터 분할 사용", value=True, 
@@ -432,12 +595,12 @@ with st.sidebar:
         with st.expander("📋 파일 목록"):
             for file in st.session_state.uploaded_files:
                 file_size = len(file.getvalue())
-                st.text(f"• {file.name} ({format_size(file_size)})")
+                st.markdown(f'<div class="file-list-item">• {file.name} ({format_size(file_size)})</div>', unsafe_allow_html=True)
         
         # 모든 파일 지우기 버튼
         if st.button("🗑️ 모든 파일 지우기", use_container_width=True, type="primary"):
             reset_all_states()
-            st.rerun()  # 즉시 페이지 새로고침
+            st.rerun()
             
     else:
         st.info("업로드된 파일이 없습니다.")
@@ -448,7 +611,7 @@ col1, col2 = st.columns([2, 1])
 with col1:
     st.subheader("📂 TXT 파일 업로드")
     
-    # 파일 업로더 - 세션 상태의 uploaded_files가 비어있을 때만 key 변경
+    # 파일 업로더
     uploader_key = f"file_uploader_{len(st.session_state.uploaded_files)}"
     uploaded_files = st.file_uploader(
         "TXT 파일을 드래그하거나 클릭하여 업로드하세요 (여러 파일 선택 가능)",
@@ -496,17 +659,17 @@ with col1:
             # 새로 업로드된 파일이 있으면 상태 업데이트
             if len(unique_files) != len(st.session_state.uploaded_files):
                 st.session_state.uploaded_files = unique_files
-                st.session_state.conversion_complete = False  # 새 파일 업로드시 변환 상태 초기화
-                st.rerun()  # 파일 목록 업데이트를 위해 리런
+                st.session_state.conversion_complete = False
+                st.rerun()
 
 with col2:
     st.subheader("🖼️ 표지 설정")
     
-    # 표지 이미지 업로드 (모든 파일에 동일한 표지 적용)
+    # 표지 이미지 업로드
     cover_image = st.file_uploader(
         "표지 이미지 업로드 (선택사항)",
         type=ALLOWED_IMAGE_TYPES,
-        key=f"cover_uploader_{st.session_state.uploaded_files}",
+        key=f"cover_uploader_{len(st.session_state.uploaded_files)}",
         help="JPG, JPEG, PNG 파일을 업로드하세요.\n첫 번째 EPUB에만 표지가 적용됩니다."
     )
     
@@ -543,7 +706,7 @@ if st.session_state.uploaded_files:
                 files_data,
                 st.session_state.cover_image,
                 use_chapter_split,
-                font_type
+                selected_font
             )
             
             if converted:
@@ -557,7 +720,7 @@ if st.session_state.uploaded_files:
                 </div>
                 ''', unsafe_allow_html=True)
                 
-                st.rerun()  # 변환 완료 후 다운로드 섹션 표시를 위해 리런
+                st.rerun()
 
 # 변환 완료 후 다운로드 섹션
 if st.session_state.get('conversion_complete', False) and st.session_state.converted_files:
@@ -573,7 +736,7 @@ if st.session_state.get('conversion_complete', False) and st.session_state.conve
     )
     
     if download_option == "개별 파일 다운로드":
-        # 각 파일별 다운로드 버튼 (그리드 레이아웃)
+        # 각 파일별 다운로드 버튼
         cols = st.columns(3)
         for idx, (safe_title, epub_data) in enumerate(st.session_state.converted_files):
             with cols[idx % 3]:
@@ -615,7 +778,7 @@ if st.session_state.uploaded_files and not st.session_state.get('conversion_comp
 # 사용 방법 안내
 with st.expander("📖 사용 방법 안내"):
     st.markdown("""
-    ### 📚 TXT to EPUB 변환기 사용법
+    ### 📚 TXT2EPUB 변환기 사용법
     
     1. **TXT 파일 업로드**
        - 파일을 드래그 앤 드롭하거나 클릭하여 선택
@@ -628,7 +791,7 @@ with st.expander("📖 사용 방법 안내"):
     
     3. **변환 설정**
        - 자동 챕터 분할: 텍스트에서 챕터를 자동으로 감지
-       - 리디바탕 폰트 적용
+       - 리디바탕, 나눔고딕 폰트 적용
     
     4. **변환 및 다운로드**
        - 'EPUB 변환 시작' 버튼 클릭
@@ -643,12 +806,12 @@ with st.expander("📖 사용 방법 안내"):
     
     ### ⚠️ 주의사항
     - 파일명에 특수문자(\\ / : * ? " < > |)는 자동으로 제거됨
-    - 해당 앱은 바이브 코딩으로 생성 되었으며 완전한 프리웨어 입니다. 어떠한 수정도 가능합니다. 
+    - 해당 앱은 바이브 코딩으로 생성 되었으며 완전한 프리웨어 입니다. 어떠한 수정도 가능합니다.
     """)
 
 # 푸터
 st.divider()
 st.markdown(
-    '<p style="text-align: center; color: #666;">📚 TXT to EPUB 변환기</p>',
+    '<p style="text-align: center; color: #666;">📚 TXT2EPUB 변환기/p>',
     unsafe_allow_html=True
 )
