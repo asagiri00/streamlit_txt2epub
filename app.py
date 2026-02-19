@@ -172,13 +172,8 @@ MAX_FILE_SIZE = 200 * 1024 * 1024  # 200MB
 MAX_TOTAL_SIZE = 1024 * 1024 * 1024  # 1GB
 ALLOWED_IMAGE_TYPES = ["jpg", "jpeg", "png"]
 
-# 폰트 설정
+# 폰트 설정 - 리디바탕만 사용
 FONTS = {
-    "나눔고딕": {
-        "file": "NanumGothic.otf",
-        "css_name": "NanumGothic",
-        "family": "'NanumGothic', sans-serif"
-    },
     "리디바탕": {
         "file": "RIDIBatang.otf",
         "css_name": "RIDIBatang",
@@ -552,13 +547,9 @@ st.markdown('<p class="upload-text">여러 TXT 파일을 각각 EPUB 전자책�
 with st.sidebar:
     st.header("⚙️ 변환 설정")
     
-    # 폰트 선택
-    selected_font = st.selectbox(
-        "폰트 선택",
-        options=list(FONTS.keys()),
-        index=0,
-        help="EPUB에 포함할 폰트를 선택하세요."
-    )
+    # 리디바탕 고정 (선택 불필요)
+    st.success("✅ 리디바탕 폰트 사용")
+    selected_font = "리디바탕"  # 고정
     
     st.divider()
     
@@ -785,7 +776,7 @@ with st.expander("📖 사용 방법 안내"):
        - CP949, EUC-KR 등 다양한 인코딩 지원
     
     3. **폰트 선택**
-       - 나눔고딕 또는 리디바탕 중 선택 가능
+       - 리디바탕 고정
     
     4. **표지 설정** (선택사항)
        - 모든 EPUB에 동일한 표지 이미지 사용 가능
