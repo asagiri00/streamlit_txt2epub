@@ -818,4 +818,3 @@ st.markdown(
     '<p style="text-align: center; color: #666;">📚 TXT2EPUB 변환기 | 해당 앱은 바이브 코딩으로 생성 되었으며 완전한 프리웨어 입니다. 어떠한 수정도 가능합니다</p>',
     unsafe_allow_html=True
 )
-)
