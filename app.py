@@ -390,6 +390,19 @@ st.markdown('<p class="upload-text">여러 TXT 파일을 각각 EPUB 전자책�
 with st.sidebar:
     st.header("⚙️ 변환 설정")
     
+    # 폰트 설정
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.markdown("**폰트:**")
+    with col2:
+        font_available = os.path.exists(RIDI_FONT_PATH)
+        if font_available:
+            st.success("리디바탕")
+            font_type = "리디바탕"
+        else:
+            st.warning("기본 폰트")
+            font_type = "기본"
+    
     # 챕터 분할 설정
     use_chapter_split = st.checkbox("자동 챕터 분할 사용", value=True, 
                                     help="텍스트에서 챕터를 자동으로 감지하여 분할합니다.")
@@ -615,7 +628,7 @@ with st.expander("📖 사용 방법 안내"):
     
     3. **변환 설정**
        - 자동 챕터 분할: 텍스트에서 챕터를 자동으로 감지
-       - 리디바탕 폰트 적용
+       - 리디바탕 폰트: 자동 적용 (파일이 있는 경우)
     
     4. **변환 및 다운로드**
        - 'EPUB 변환 시작' 버튼 클릭
@@ -629,13 +642,13 @@ with st.expander("📖 사용 방법 안내"):
     위 형식으로 저장하면 제목과 저자가 자동으로 EPUB 메타데이터에 포함됩니다.
     
     ### ⚠️ 주의사항
+    - 리디바탕 폰트 사용시 `RIDIBatang.otf` 파일이 같은 폴더에 있어야 함
     - 파일명에 특수문자(\\ / : * ? " < > |)는 자동으로 제거됨
-    - 해당 앱은 바이브 코딩으로 생성 되었으며 완전한 프리웨어 입니다. 어떠한 수정도 가능합니다. 
     """)
 
 # 푸터
 st.divider()
 st.markdown(
-    '<p style="text-align: center; color: #666;">📚 TXT2EPUB 변환기</p>',
+    '<p style="text-align: center; color: #666;">📚 TXT to EPUB 변환기</p>',
     unsafe_allow_html=True
 )
