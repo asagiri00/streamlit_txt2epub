@@ -5,10 +5,9 @@ import io
 import uuid
 import os
 import re
-import time
+import chardet
 from pathlib import Path
 from charset_normalizer import from_bytes
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # 페이지 설정
 st.set_page_config(
@@ -188,6 +187,38 @@ FONTS = {
 }
 
 # -------------------------
+# 인코딩 처리 함수
+# -------------------------
+
+def detect_encoding(file_content):
+    """파일의 인코딩을 감지하고 UTF-8로 변환"""
+    try:
+        # charset-normalizer로 감지
+        result = from_bytes(file_content).best()
+        if result and result.encoding:
+            detected_encoding = result.encoding
+            text = str(result)
+            return detected_encoding, text
+        
+        # chardet로 시도
+        detected = chardet.detect(file_content)
+        detected_encoding = detected['encoding'] if detected['encoding'] else 'utf-8'
+        text = file_content.decode(detected_encoding, errors='replace')
+        return detected_encoding, text
+        
+    except Exception as e:
+        # 모든 시도 실패시 기본 인코딩으로 시도
+        for encoding in ['utf-8', 'cp949', 'euc-kr', 'latin-1', 'cp1252']:
+            try:
+                text = file_content.decode(encoding, errors='replace')
+                return encoding, text
+            except:
+                continue
+        
+        # 최후의 수단
+        return 'unknown', file_content.decode('utf-8', errors='replace')
+
+# -------------------------
 # 유틸리티 함수
 # -------------------------
 
@@ -199,13 +230,6 @@ def format_size(size_bytes):
         return f"{size_bytes/1024:.1f} KB"
     else:
         return f"{size_bytes/(1024*1024):.1f} MB"
-
-def check_font_available(font_key):
-    """폰트 파일 존재 여부 확인"""
-    font_info = FONTS.get(font_key)
-    if font_info:
-        return os.path.exists(font_info["file"])
-    return False
 
 def extract_metadata(filename):
     """파일명에서 제목과 저자 추출"""
@@ -267,21 +291,20 @@ def build_single_epub(file_name, file_content, cover_image=None, use_chapter_spl
         # 메타데이터 추출
         title, author, safe_title = extract_metadata(file_name)
         
+        # 인코딩 감지 및 UTF-8로 변환
+        detected_encoding, text = detect_encoding(file_content)
+        
+        # 디버깅을 위한 인코딩 정보 (선택사항)
+        if detected_encoding.lower() != 'utf-8':
+            st.info(f"📄 '{file_name}' 인코딩: {detected_encoding} → UTF-8 변환됨")
+        
+        lines = text.splitlines()
+        
         # 폰트 설정
         font_info = FONTS.get(selected_font, FONTS["나눔고딕"])
         font_file = font_info["file"]
         font_css_name = font_info["css_name"]
         font_family = font_info["family"]
-        embed_font = os.path.exists(font_file)
-        
-        # 텍스트 인코딩 감지 및 디코딩
-        try:
-            detected = from_bytes(file_content).best()
-            text = str(detected) if detected else file_content.decode('utf-8', errors='ignore')
-        except:
-            text = file_content.decode('cp949', errors='ignore')
-        
-        lines = text.splitlines()
         
         # 챕터 분할
         if use_chapter_split:
@@ -296,7 +319,7 @@ def build_single_epub(file_name, file_content, cover_image=None, use_chapter_spl
             src: url('fonts/{font_file}');
         }}
         body {{ 
-            font-family: {font_family if embed_font else 'serif'};
+            font-family: {font_family};
             line-height: 1.8;
             margin: 5% 8%;
             text-align: justify;
@@ -341,9 +364,8 @@ def build_single_epub(file_name, file_content, cover_image=None, use_chapter_spl
             zf.writestr("META-INF/container.xml", container_xml)
             
             # 폰트 추가
-            if embed_font:
-                with open(font_file, "rb") as f:
-                    zf.writestr(f"OEBPS/fonts/{font_file}", f.read())
+            with open(font_file, "rb") as f:
+                zf.writestr(f"OEBPS/fonts/{font_file}", f.read())
             
             # CSS 추가
             zf.writestr("OEBPS/style.css", css_content)
@@ -446,7 +468,7 @@ def build_single_epub(file_name, file_content, cover_image=None, use_chapter_spl
             zf.writestr("OEBPS/toc.ncx", ncx)
             
             # 폰트 manifest 항목
-            font_item = f'\n        <item id="font" href="fonts/{font_file}" media-type="application/vnd.ms-opentype"/>' if embed_font else ""
+            font_item = f'\n        <item id="font" href="fonts/{font_file}" media-type="application/vnd.ms-opentype"/>'
             
             # content.opf
             opf = f'''<?xml version="1.0" encoding="utf-8"?>
@@ -531,38 +553,12 @@ with st.sidebar:
     st.header("⚙️ 변환 설정")
     
     # 폰트 선택
-    available_fonts = []
-    font_status = {}
-    
-    for font_name, font_info in FONTS.items():
-        if os.path.exists(font_info["file"]):
-            available_fonts.append(font_name)
-            font_status[font_name] = "✅"
-        else:
-            font_status[font_name] = "❌"
-    
-    # 폰트 선택 UI
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        st.markdown("**폰트:**")
-    with col2:
-        if available_fonts:
-            selected_font = st.selectbox(
-                "폰트 선택",
-                options=available_fonts,
-                index=0 if "나눔고딕" in available_fonts else 0,
-                label_visibility="collapsed"
-            )
-        else:
-            st.warning("사용 가능한 폰트가 없습니다.")
-            selected_font = "나눔고딕"
-    
-    # 폰트 상태 표시
-    for font_name, status in font_status.items():
-        if status == "✅":
-            st.success(f"{status} {font_name}")
-        else:
-            st.error(f"{status} {font_name} (파일 없음)")
+    selected_font = st.selectbox(
+        "폰트 선택",
+        options=list(FONTS.keys()),
+        index=0,
+        help="EPUB에 포함할 폰트를 선택하세요."
+    )
     
     st.divider()
     
@@ -784,16 +780,23 @@ with st.expander("📖 사용 방법 안내"):
        - 파일을 드래그 앤 드롭하거나 클릭하여 선택
        - 여러 파일 동시 업로드 가능 (파일당 최대 200MB)
     
-    2. **표지 설정** (선택사항)
+    2. **인코딩 자동 변환**
+       - 모든 텍스트 파일이 자동으로 UTF-8로 변환됨
+       - CP949, EUC-KR 등 다양한 인코딩 지원
+    
+    3. **폰트 선택**
+       - 나눔고딕 또는 리디바탕 중 선택 가능
+    
+    4. **표지 설정** (선택사항)
        - 모든 EPUB에 동일한 표지 이미지 사용 가능
        - 여러 파일 변환 시 첫 번째 파일에만 표지 적용
        - JPG, JPEG, PNG 형식 지원
     
-    3. **변환 설정**
+    5. **변환 설정**
        - 자동 챕터 분할: 텍스트에서 챕터를 자동으로 감지
-       - 리디바탕, 나눔고딕 폰트 적용
+       - 폰트 자동 포함
     
-    4. **변환 및 다운로드**
+    6. **변환 및 다운로드**
        - 'EPUB 변환 시작' 버튼 클릭
        - 변환 완료 후 개별 파일 또는 ZIP으로 다운로드
     
@@ -806,12 +809,13 @@ with st.expander("📖 사용 방법 안내"):
     
     ### ⚠️ 주의사항
     - 파일명에 특수문자(\\ / : * ? " < > |)는 자동으로 제거됨
-    - 해당 앱은 바이브 코딩으로 생성 되었으며 완전한 프리웨어 입니다. 어떠한 수정도 가능합니다.
+    - 모든 텍스트 파일은 UTF-8로 자동 변환되어 처리됨
     """)
 
 # 푸터
 st.divider()
 st.markdown(
-    '<p style="text-align: center; color: #666;">📚 TXT2EPUB 변환기/p>',
+    '<p style="text-align: center; color: #666;">📚 TXT2EPUB 변환기</p>',
+    '<p style="text-align: center; color: #666;">해당 앱은 바이브 코딩으로 생성 되었으며 완전한 프리웨어 입니다. 어떠한 수정도 가능합니다</p>',
     unsafe_allow_html=True
 )
