@@ -175,7 +175,7 @@ ALLOWED_IMAGE_TYPES = ["jpg", "jpeg", "png"]
 # 폰트 설정
 FONTS = {
     "나눔고딕": {
-        "file": "NanumGothic.ttf",
+        "file": "NanumGothic.otf",
         "css_name": "NanumGothic",
         "family": "'NanumGothic', sans-serif"
     },
