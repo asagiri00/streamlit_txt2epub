@@ -1,0 +1,5 @@
+streamlit
+requests
+duckduckgo_search
+charset-normalizer
+Pillow
