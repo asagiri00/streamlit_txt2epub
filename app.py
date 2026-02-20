@@ -5,7 +5,6 @@ import io
 import uuid
 import os
 import re
-import chardet
 from pathlib import Path
 from charset_normalizer import from_bytes
 
@@ -16,28 +15,21 @@ st.set_page_config(
     layout="wide"
 )
 
-# CSS 스타일링 - 다크모드 대응
+# CSS 스타일링 (이전과 동일)
 st.markdown("""
 <style>
-    /* 진행바 색상 */
     .stProgress > div > div > div > div {
         background-color: #4CAF50;
     }
-    
-    /* 업로드 텍스트 */
     .upload-text {
         font-size: 1.2em;
         color: #666;
     }
-    
-    /* 다크모드 대응 */
     @media (prefers-color-scheme: dark) {
         .upload-text {
             color: #aaa;
         }
     }
-    
-    /* 성공 메시지 박스 */
     .success-box {
         padding: 1rem;
         border-radius: 0.5rem;
@@ -45,8 +37,6 @@ st.markdown("""
         border: 1px solid #c3e6cb;
         color: #155724;
     }
-    
-    /* 다크모드 성공 메시지 */
     @media (prefers-color-scheme: dark) {
         .success-box {
             background-color: #1e3a2a;
@@ -54,8 +44,6 @@ st.markdown("""
             color: #a7f3d0;
         }
     }
-    
-    /* 파일 목록 컨테이너 */
     .file-list {
         max-height: 300px;
         overflow-y: auto;
@@ -64,8 +52,6 @@ st.markdown("""
         border-radius: 5px;
         background-color: #ffffff;
     }
-    
-    /* 다크모드 파일 목록 */
     @media (prefers-color-scheme: dark) {
         .file-list {
             background-color: #1e1e1e;
@@ -73,8 +59,6 @@ st.markdown("""
             color: #e0e0e0;
         }
     }
-    
-    /* 통계 카드 - 다크모드 대응 */
     .stat-card {
         padding: 1rem;
         border-radius: 0.5rem;
@@ -83,21 +67,16 @@ st.markdown("""
         color: #31333F;
         border: 1px solid #e0e0e0;
     }
-    
-    /* 다크모드 통계 카드 */
     @media (prefers-color-scheme: dark) {
         .stat-card {
             background-color: #262730;
             color: #fafafa;
             border-color: #404040;
         }
-        
         .stat-card h3, .stat-card h4, .stat-card p {
             color: #fafafa !important;
         }
     }
-    
-    /* 정보 메시지 박스 - 다크모드 대응 */
     .info-box {
         padding: 0.75rem;
         border-radius: 0.25rem;
@@ -105,7 +84,6 @@ st.markdown("""
         border: 1px solid #b8daff;
         color: #004085;
     }
-    
     @media (prefers-color-scheme: dark) {
         .info-box {
             background-color: #1e3a5f;
@@ -113,8 +91,6 @@ st.markdown("""
             color: #b8daff;
         }
     }
-    
-    /* 경고 메시지 박스 - 다크모드 대응 */
     .warning-box {
         padding: 0.75rem;
         border-radius: 0.25rem;
@@ -122,7 +98,6 @@ st.markdown("""
         border: 1px solid #ffeeba;
         color: #856404;
     }
-    
     @media (prefers-color-scheme: dark) {
         .warning-box {
             background-color: #3a3a1e;
@@ -130,37 +105,47 @@ st.markdown("""
             color: #ffd966;
         }
     }
-    
-    /* 파일 목록 텍스트 - 다크모드 대응 */
     .file-list-item {
         padding: 4px 0;
         border-bottom: 1px solid #f0f0f0;
     }
-    
     @media (prefers-color-scheme: dark) {
         .file-list-item {
             border-bottom-color: #333;
         }
     }
-    
-    /* 다운로드 버튼 컨테이너 */
-    .download-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: 10px;
-        margin-top: 20px;
-    }
-    
-    /* 스트림릿 기본 컴포넌트 다크모드 대응 */
     @media (prefers-color-scheme: dark) {
         .stText, .stMarkdown, .stSubheader {
             color: #fafafa;
         }
-        
-        /* 사이드바 텍스트 색상 */
         .css-1d391kg, .css-163ttbj, .css-1v3fvcr {
             color: #fafafa;
         }
+    }
+    /* 표지 미리보기 그리드 */
+    .cover-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 15px;
+        margin-top: 20px;
+    }
+    .cover-item {
+        text-align: center;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        background-color: #f9f9f9;
+    }
+    @media (prefers-color-scheme: dark) {
+        .cover-item {
+            background-color: #262730;
+            border-color: #404040;
+        }
+    }
+    .cover-item img {
+        max-width: 100%;
+        height: auto;
+        margin-bottom: 10px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -182,36 +167,99 @@ FONTS = {
 }
 
 # -------------------------
-# 인코딩 처리 함수
+# 텍스트 처리 함수
 # -------------------------
 
 def detect_encoding(file_content):
     """파일의 인코딩을 감지하고 UTF-8로 변환"""
     try:
-        # charset-normalizer로 감지
         result = from_bytes(file_content).best()
         if result and result.encoding:
             detected_encoding = result.encoding
             text = str(result)
             return detected_encoding, text
-        
-        # chardet로 시도
-        detected = chardet.detect(file_content)
-        detected_encoding = detected['encoding'] if detected['encoding'] else 'utf-8'
-        text = file_content.decode(detected_encoding, errors='replace')
-        return detected_encoding, text
-        
-    except Exception as e:
-        # 모든 시도 실패시 기본 인코딩으로 시도
-        for encoding in ['utf-8', 'cp949', 'euc-kr', 'latin-1', 'cp1252']:
-            try:
-                text = file_content.decode(encoding, errors='replace')
-                return encoding, text
-            except:
-                continue
-        
-        # 최후의 수단
-        return 'unknown', file_content.decode('utf-8', errors='replace')
+    except:
+        pass
+    
+    for encoding in ['utf-8', 'cp949', 'euc-kr', 'latin-1', 'cp1252']:
+        try:
+            text = file_content.decode(encoding, errors='replace')
+            return encoding, text
+        except:
+            continue
+    
+    return 'unknown', file_content.decode('utf-8', errors='replace')
+
+def clean_text(text):
+    """텍스트 정리 및 줄바꿈 정규화"""
+    # HTML 엔티티 이스케이프 먼저 처리
+    text = html.unescape(text)
+    
+    # 다양한 줄바꿈 문자를 \n으로 통일
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    
+    # 연속된 줄바꿈을 2개로 제한 (문단 구분)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    # 줄 시작과 끝의 공백 제거
+    lines = []
+    for line in text.split('\n'):
+        line = line.strip()
+        if line:  # 내용이 있는 줄만 추가
+            lines.append(line)
+        else:
+            lines.append('')  # 빈 줄은 문단 구분자로 유지
+    
+    # 연속된 빈 줄 제거
+    cleaned_lines = []
+    prev_empty = False
+    for line in lines:
+        if line == '':
+            if not prev_empty:
+                cleaned_lines.append('')
+                prev_empty = True
+        else:
+            cleaned_lines.append(line)
+            prev_empty = False
+    
+    return '\n'.join(cleaned_lines)
+
+def process_paragraphs(text, min_chars_per_line=30):
+    """문단 처리 및 자연스러운 줄바꿈 적용"""
+    paragraphs = text.split('\n\n')
+    processed_paragraphs = []
+    
+    for para in paragraphs:
+        if not para.strip():
+            continue
+            
+        lines = para.split('\n')
+        if len(lines) == 1 and len(lines[0]) > min_chars_per_line * 2:
+            # 긴 단일 줄을 문단으로 처리
+            words = lines[0].split()
+            new_lines = []
+            current_line = []
+            current_length = 0
+            
+            for word in words:
+                if current_length + len(word) + 1 <= min_chars_per_line * 2:
+                    current_line.append(word)
+                    current_length += len(word) + 1
+                else:
+                    if current_line:
+                        new_lines.append(' '.join(current_line))
+                    current_line = [word]
+                    current_length = len(word)
+            
+            if current_line:
+                new_lines.append(' '.join(current_line))
+            
+            processed_paragraphs.append('\n'.join(new_lines))
+        else:
+            # 기존 줄바꿈 유지
+            processed_paragraphs.append('\n'.join(lines))
+    
+    return '\n\n'.join(processed_paragraphs)
 
 # -------------------------
 # 유틸리티 함수
@@ -232,21 +280,17 @@ def extract_metadata(filename):
     author = "미상"
     title = name
     
-    # 패턴 1: 제목 - 저자
     if " - " in name:
         parts = name.split(" - ", 1)
         title, author = parts[0].strip(), parts[1].strip()
-    # 패턴 2: 제목_저자
     elif "_" in name:
         parts = name.split("_", 1)
         title, author = parts[0].strip(), parts[1].strip()
-    # 패턴 3: 제목(저자)
     elif "(" in name and name.endswith(")"):
         match = re.search(r"(.+)\((.+)\)", name)
         if match:
             title, author = match.group(1).strip(), match.group(2).strip()
     
-    # 파일명에 사용할 수 없는 문자 제거
     safe_title = re.sub(r'[\\/*?:"<>|]', "", title)
     return title, author, safe_title
 
@@ -262,7 +306,6 @@ def detect_chapters(lines):
         if not line_stripped:
             continue
         
-        # 챕터 제목 감지
         if chapter_pattern.match(line_stripped):
             if current_lines:
                 chapters.append((current_chapter, current_lines))
@@ -271,13 +314,12 @@ def detect_chapters(lines):
         else:
             current_lines.append(html.escape(line_stripped))
     
-    # 마지막 챕터 추가
     if current_lines:
         chapters.append((current_chapter, current_lines))
     
     return chapters if chapters else [("본문", [html.escape(l.strip()) for l in lines if l.strip()])]
 
-def build_single_epub(file_name, file_content, cover_image=None, use_chapter_split=True, selected_font="나눔고딕"):
+def build_single_epub(file_name, file_content, cover_image=None, use_chapter_split=True, selected_font="리디바탕"):
     """단일 TXT 파일을 EPUB으로 변환"""
     try:
         epub_stream = io.BytesIO()
@@ -289,14 +331,17 @@ def build_single_epub(file_name, file_content, cover_image=None, use_chapter_spl
         # 인코딩 감지 및 UTF-8로 변환
         detected_encoding, text = detect_encoding(file_content)
         
-        # 디버깅을 위한 인코딩 정보 (선택사항)
+        # 텍스트 정리
+        text = clean_text(text)
+        text = process_paragraphs(text)
+        
         if detected_encoding.lower() != 'utf-8':
             st.info(f"📄 '{file_name}' 인코딩: {detected_encoding} → UTF-8 변환됨")
         
         lines = text.splitlines()
         
         # 폰트 설정
-        font_info = FONTS.get(selected_font, FONTS["나눔고딕"])
+        font_info = FONTS.get(selected_font, FONTS["리디바탕"])
         font_file = font_info["file"]
         font_css_name = font_info["css_name"]
         font_family = font_info["family"]
@@ -346,7 +391,7 @@ def build_single_epub(file_name, file_content, cover_image=None, use_chapter_spl
         '''
         
         with zipfile.ZipFile(epub_stream, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-            # mimetype 파일 (압축하지 않음)
+            # mimetype 파일
             zf.writestr("mimetype", "application/epub+zip", compress_type=zipfile.ZIP_STORED)
             
             # container.xml
@@ -371,10 +416,8 @@ def build_single_epub(file_name, file_content, cover_image=None, use_chapter_spl
             cover_spine = ""
             
             if cover_image:
-                # 표지 이미지 저장
                 zf.writestr("OEBPS/cover.jpg", cover_image.getvalue())
                 
-                # 표지 XHTML
                 cover_xhtml = '''<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -408,7 +451,6 @@ def build_single_epub(file_name, file_content, cover_image=None, use_chapter_spl
             for i, (ch_title, ch_lines) in enumerate(chapters):
                 fname = f"chapter_{i:04d}.xhtml"
                 
-                # 첫 번째 챕터에만 전체 제목 표시
                 header = ""
                 if i == 0:
                     header = f"<h1>{html.escape(title)}</h1>"
@@ -434,11 +476,9 @@ def build_single_epub(file_name, file_content, cover_image=None, use_chapter_spl
                 
                 zf.writestr(f"OEBPS/{fname}", xhtml)
                 
-                # manifest 항목 추가
                 manifest_items += f'\n        <item id="chap{i}" href="{fname}" media-type="application/xhtml+xml"/>'
                 spine_items += f'\n        <itemref idref="chap{i}"/>'
                 
-                # NCX 항목 추가
                 ncx_navpoints += f'''
         <navPoint id="nav{i}" playOrder="{i+1}">
             <navLabel>
@@ -447,7 +487,7 @@ def build_single_epub(file_name, file_content, cover_image=None, use_chapter_spl
             <content src="{fname}"/>
         </navPoint>'''
             
-            # ncx 파일 (목차)
+            # ncx 파일
             ncx = f'''<?xml version="1.0" encoding="UTF-8"?>
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
     <head>
@@ -462,7 +502,6 @@ def build_single_epub(file_name, file_content, cover_image=None, use_chapter_spl
 </ncx>'''
             zf.writestr("OEBPS/toc.ncx", ncx)
             
-            # 폰트 manifest 항목
             font_item = f'\n        <item id="font" href="fonts/{font_file}" media-type="application/vnd.ms-opentype"/>'
             
             # content.opf
@@ -492,20 +531,22 @@ def build_single_epub(file_name, file_content, cover_image=None, use_chapter_spl
         st.error(f"'{file_name}' 변환 중 오류 발생: {str(e)}")
         return None
 
-def convert_all_files(files_data, cover_image=None, use_chapter_split=True, selected_font="나눔고딕"):
-    """여러 파일을 각각 EPUB으로 변환"""
+def convert_all_files(files_data, cover_images=None, use_chapter_split=True, selected_font="리디바탕"):
+    """여러 파일을 각각 EPUB으로 변환 (각 파일에 개별 표지 적용)"""
     converted_files = []
     total_files = len(files_data)
     
-    # 진행 상태 표시를 위한 컨테이너
     progress_bar = st.progress(0)
     status_text = st.empty()
     
     for idx, (file_name, file_content) in enumerate(files_data):
         status_text.text(f"📖 변환 중: {file_name} ({idx + 1}/{total_files})")
         
-        # 단일 파일 변환 (첫 번째 파일에만 표지 적용)
-        current_cover = cover_image if idx == 0 and cover_image else None
+        # 각 파일에 해당하는 표지 이미지 사용
+        current_cover = None
+        if cover_images and idx < len(cover_images):
+            current_cover = cover_images[idx]
+        
         result = build_single_epub(file_name, file_content, current_cover, use_chapter_split, selected_font)
         
         if result:
@@ -517,14 +558,13 @@ def convert_all_files(files_data, cover_image=None, use_chapter_split=True, sele
     return converted_files
 
 def reset_all_states():
-    """모든 세션 상태 초기화 (페이지 새로고침 효과)"""
+    """모든 세션 상태 초기화"""
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     
-    # 필수 상태 다시 초기화
     st.session_state.converted_files = []
     st.session_state.uploaded_files = []
-    st.session_state.cover_image = None
+    st.session_state.cover_images = []
     st.session_state.conversion_complete = False
     st.session_state.page_loaded = True
 
@@ -532,28 +572,25 @@ def reset_all_states():
 # 메인 UI
 # -------------------------
 
-# 세션 상태 초기화 (처음 로드 시)
 if 'initialized' not in st.session_state:
     st.session_state.initialized = True
     st.session_state.converted_files = []
     st.session_state.uploaded_files = []
-    st.session_state.cover_image = None
+    st.session_state.cover_images = []
     st.session_state.conversion_complete = False
 
 st.title("📚 TXT2EPUB 변환기")
 st.markdown('<p class="upload-text">여러 TXT 파일을 각각 EPUB 전자책으로 변환합니다.</p>', unsafe_allow_html=True)
 
-# 사이드바 - 설정 및 파일 정보
+# 사이드바
 with st.sidebar:
     st.header("⚙️ 변환 설정")
     
-    # 리디바탕 고정 (선택 불필요)
     st.success("✅ 리디바탕 폰트 사용")
-    selected_font = "리디바탕"  # 고정
+    selected_font = "리디바탕"
     
     st.divider()
     
-    # 챕터 분할 설정
     use_chapter_split = st.checkbox("자동 챕터 분할 사용", value=True, 
                                     help="텍스트에서 챕터를 자동으로 감지하여 분할합니다.")
     
@@ -567,7 +604,6 @@ with st.sidebar:
         total_size = sum(len(f.getvalue()) for f in st.session_state.uploaded_files)
         avg_size = total_size / total_files if total_files > 0 else 0
         
-        # 통계 카드
         st.markdown(f"""
         <div class="stat-card">
             <h3>{total_files}</h3>
@@ -578,17 +614,14 @@ with st.sidebar:
         </div>
         """, unsafe_allow_html=True)
         
-        # 파일 목록
         with st.expander("📋 파일 목록"):
             for file in st.session_state.uploaded_files:
                 file_size = len(file.getvalue())
                 st.markdown(f'<div class="file-list-item">• {file.name} ({format_size(file_size)})</div>', unsafe_allow_html=True)
         
-        # 모든 파일 지우기 버튼
         if st.button("🗑️ 모든 파일 지우기", use_container_width=True, type="primary"):
             reset_all_states()
             st.rerun()
-            
     else:
         st.info("업로드된 파일이 없습니다.")
 
@@ -598,7 +631,6 @@ col1, col2 = st.columns([2, 1])
 with col1:
     st.subheader("📂 TXT 파일 업로드")
     
-    # 파일 업로더
     uploader_key = f"file_uploader_{len(st.session_state.uploaded_files)}"
     uploaded_files = st.file_uploader(
         "TXT 파일을 드래그하거나 클릭하여 업로드하세요 (여러 파일 선택 가능)",
@@ -608,7 +640,6 @@ with col1:
         help=f"파일당 최대 {format_size(MAX_FILE_SIZE)}까지 업로드 가능합니다."
     )
     
-    # 파일 크기 검증 및 저장
     if uploaded_files:
         valid_files = []
         invalid_files = []
@@ -622,7 +653,6 @@ with col1:
             else:
                 invalid_files.append((file.name, file_size))
         
-        # 전체 용량 검증
         if total_size > MAX_TOTAL_SIZE:
             st.error(f"❌ 전체 용량이 초과되었습니다. ({format_size(total_size)} / {format_size(MAX_TOTAL_SIZE)})")
             valid_files = []
@@ -632,7 +662,6 @@ with col1:
                 st.error(f"❌ {name}: 용량 초과 ({format_size(size)} / {format_size(MAX_FILE_SIZE)})")
         
         if valid_files:
-            # 중복 제거 (파일명 기준)
             unique_files = []
             seen_names = set()
             for file in valid_files:
@@ -643,32 +672,57 @@ with col1:
             if len(unique_files) != len(valid_files):
                 st.warning(f"⚠️ 중복된 파일명이 제거되었습니다. ({len(valid_files)} → {len(unique_files)})")
             
-            # 새로 업로드된 파일이 있으면 상태 업데이트
             if len(unique_files) != len(st.session_state.uploaded_files):
                 st.session_state.uploaded_files = unique_files
+                st.session_state.cover_images = [None] * len(unique_files)  # 표지 배열 초기화
                 st.session_state.conversion_complete = False
                 st.rerun()
 
 with col2:
     st.subheader("🖼️ 표지 설정")
+    st.markdown("각 파일마다 다른 표지를 지정할 수 있습니다.")
     
-    # 표지 이미지 업로드
-    cover_image = st.file_uploader(
-        "표지 이미지 업로드 (선택사항)",
-        type=ALLOWED_IMAGE_TYPES,
-        key=f"cover_uploader_{len(st.session_state.uploaded_files)}",
-        help="JPG, JPEG, PNG 파일을 업로드하세요.\n첫 번째 EPUB에만 표지가 적용됩니다."
-    )
-    
-    if cover_image:
-        st.session_state.cover_image = cover_image
-        st.image(cover_image, caption="표지 미리보기", use_container_width=True)
+    if st.session_state.uploaded_files:
+        # 각 파일별 표지 업로드 UI
+        cover_images = []
         
-        if len(st.session_state.uploaded_files) > 1:
-            st.info("ℹ️ 여러 파일 변환 시 첫 번째 EPUB에만 표지가 적용됩니다.")
+        with st.expander("📸 파일별 표지 업로드", expanded=True):
+            for idx, file in enumerate(st.session_state.uploaded_files):
+                st.markdown(f"**{idx + 1}. {file.name[:30]}**")
+                
+                # 이전에 업로드된 표지가 있으면 표시
+                cover_key = f"cover_{idx}_{file.name}"
+                cover_file = st.file_uploader(
+                    f"표지 이미지",
+                    type=ALLOWED_IMAGE_TYPES,
+                    key=cover_key,
+                    label_visibility="collapsed"
+                )
+                
+                if cover_file:
+                    cover_images.append(cover_file)
+                    # 미리보기
+                    st.image(cover_file, width=100, caption=f"표지 {idx + 1}")
+                else:
+                    # 기존 표지 유지 또는 None
+                    if idx < len(st.session_state.cover_images):
+                        cover_images.append(st.session_state.cover_images[idx])
+                    else:
+                        cover_images.append(None)
+                
+                st.divider()
+        
+        # 표지 배열 업데이트
+        if cover_images:
+            st.session_state.cover_images = cover_images
+        
+        # 표지 적용 안내
+        if any(st.session_state.cover_images):
+            st.success(f"✅ {sum(1 for c in st.session_state.cover_images if c)}개 파일에 표지가 지정되었습니다.")
+        else:
+            st.info("표지 없이 변환합니다.")
     else:
-        st.session_state.cover_image = None
-        st.info("표지 없이 변환합니다.")
+        st.info("먼저 TXT 파일을 업로드해주세요.")
 
 # 변환 버튼 및 실행
 if st.session_state.uploaded_files:
@@ -679,19 +733,16 @@ if st.session_state.uploaded_files:
         convert_button = st.button(
             "🔮 EPUB 변환 시작",
             type="primary",
-            use_container_width=True,
-            disabled=len(st.session_state.uploaded_files) == 0
+            use_container_width=True
         )
     
     if convert_button:
         with st.spinner("📚 EPUB 변환 중..."):
-            # 파일 데이터 준비
             files_data = [(f.name, f.getvalue()) for f in st.session_state.uploaded_files]
             
-            # 변환 실행
             converted = convert_all_files(
                 files_data,
-                st.session_state.cover_image,
+                st.session_state.cover_images,
                 use_chapter_split,
                 selected_font
             )
@@ -700,7 +751,6 @@ if st.session_state.uploaded_files:
                 st.session_state.converted_files = converted
                 st.session_state.conversion_complete = True
                 
-                # 성공 메시지
                 st.markdown(f'''
                 <div class="success-box">
                     ✨ {len(converted)}개 파일 변환 완료!
@@ -715,7 +765,6 @@ if st.session_state.get('conversion_complete', False) and st.session_state.conve
     
     st.subheader("📥 다운로드")
     
-    # 다운로드 옵션
     download_option = st.radio(
         "다운로드 방식 선택",
         ["개별 파일 다운로드", "ZIP 파일로 한번에 다운로드"],
@@ -723,7 +772,6 @@ if st.session_state.get('conversion_complete', False) and st.session_state.conve
     )
     
     if download_option == "개별 파일 다운로드":
-        # 각 파일별 다운로드 버튼
         cols = st.columns(3)
         for idx, (safe_title, epub_data) in enumerate(st.session_state.converted_files):
             with cols[idx % 3]:
@@ -737,9 +785,7 @@ if st.session_state.get('conversion_complete', False) and st.session_state.conve
                     use_container_width=True,
                     key=f"download_{idx}"
                 )
-    
-    else:  # ZIP 파일 다운로드
-        # ZIP 파일 생성
+    else:
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             for safe_title, epub_data in st.session_state.converted_files:
@@ -758,7 +804,6 @@ if st.session_state.get('conversion_complete', False) and st.session_state.conve
             use_container_width=True
         )
 
-# 진행 중인 작업 표시
 if st.session_state.uploaded_files and not st.session_state.get('conversion_complete', False):
     st.info("👆 'EPUB 변환 시작' 버튼을 클릭하여 변환을 시작하세요.")
 
@@ -771,23 +816,19 @@ with st.expander("📖 사용 방법 안내"):
        - 파일을 드래그 앤 드롭하거나 클릭하여 선택
        - 여러 파일 동시 업로드 가능 (파일당 최대 200MB)
     
-    2. **인코딩 자동 변환**
-       - 모든 텍스트 파일이 자동으로 UTF-8로 변환됨
-       - CP949, EUC-KR 등 다양한 인코딩 지원
-    
-    3. **폰트 선택**
-       - 리디바탕 고정
-    
-    4. **표지 설정** (선택사항)
-       - 모든 EPUB에 동일한 표지 이미지 사용 가능
-       - 여러 파일 변환 시 첫 번째 파일에만 표지 적용
+    2. **표지 설정** (선택사항)
+       - 각 파일마다 다른 표지 이미지 지정 가능
        - JPG, JPEG, PNG 형식 지원
+       - 표지를 지정하지 않은 파일은 표지 없이 생성
     
-    5. **변환 설정**
+    3. **텍스트 자동 정리**
+       - 모든 텍스트 파일이 자동으로 UTF-8로 변환됨
+    
+    4. **변환 설정**
        - 자동 챕터 분할: 텍스트에서 챕터를 자동으로 감지
-       - 폰트 자동 포함
+       - 리디바탕 폰트 자동 포함
     
-    6. **변환 및 다운로드**
+    5. **변환 및 다운로드**
        - 'EPUB 변환 시작' 버튼 클릭
        - 변환 완료 후 개별 파일 또는 ZIP으로 다운로드
     
@@ -806,6 +847,6 @@ with st.expander("📖 사용 방법 안내"):
 # 푸터
 st.divider()
 st.markdown(
-    '<p style="text-align: center; color: #666;">📚 TXT2EPUB 변환기 | 해당 앱은 바이브 코딩으로 생성 되었으며 완전한 프리웨어 입니다. 어떠한 수정도 가능합니다</p>',
+    '<p style="text-align: center; color: #666;">📚 TXT2EPUB 변환기 | 해당 앱은 바이브 코딩으로 생성 되었으며 완전한 Free software 입니다. 자유롭게 수정, 배포하셔도 됩니다</p>',
     unsafe_allow_html=True
 )
