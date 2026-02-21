@@ -557,16 +557,27 @@ def convert_all_files(files_data, cover_images=None, use_chapter_split=True, sel
     status_text.text("✅ 모든 파일 변환 완료!")
     return converted_files
 
-def reset_all_states():
-    """모든 세션 상태 초기화"""
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    
-    st.session_state.converted_files = []
-    st.session_state.uploaded_files = []
-    st.session_state.cover_images = []
-    st.session_state.conversion_complete = False
-    st.session_state.page_loaded = True
+# def reset_all_states():
+#     """모든 세션 상태 초기화"""
+#     # 초기화할 키 목록
+#     keys_to_delete = []
+#     for key in st.session_state.keys():
+#         if key != 'initialized':  # initialized는 유지
+#             keys_to_delete.append(key)
+#     
+#     # 키 삭제
+#     for key in keys_to_delete:
+#         del st.session_state[key]
+#     
+#     # 기본 상태 재설정
+#     st.session_state.converted_files = []
+#     st.session_state.uploaded_files = []
+#     st.session_state.cover_images = []
+#     st.session_state.conversion_complete = False
+#     st.session_state.initialized = True
+#     
+#     # Streamlit이 완전히 초기화되도록 약간의 지연
+#     st.rerun()
 
 # -------------------------
 # 메인 UI
@@ -599,28 +610,36 @@ with st.sidebar:
     # 파일 정보 섹션
     st.header("📊 파일 정보")
     
-    if st.session_state.uploaded_files:
+    if st.session_state.uploaded_files and len(st.session_state.uploaded_files) > 0:
         total_files = len(st.session_state.uploaded_files)
         total_size = sum(len(f.getvalue()) for f in st.session_state.uploaded_files)
-        avg_size = total_size / total_files if total_files > 0 else 0
         
+        # 통계 카드
         st.markdown(f"""
         <div class="stat-card">
             <h3>{total_files}</h3>
             <p>전체 파일 수</p>
             <h4>{format_size(total_size)}</h4>
             <p>전체 용량</p>
-            <p>평균: {format_size(avg_size)}</p>
         </div>
         """, unsafe_allow_html=True)
         
-        with st.expander("📋 파일 목록"):
-            for file in st.session_state.uploaded_files:
-                file_size = len(file.getvalue())
-                st.markdown(f'<div class="file-list-item">• {file.name} ({format_size(file_size)})</div>', unsafe_allow_html=True)
+        # 파일 목록 (항상 표시)
+        st.markdown("**📋 파일 목록**")
+        for i, file in enumerate(st.session_state.uploaded_files, 1):
+            file_size = len(file.getvalue())
+            st.markdown(f'{i}. {file.name} ({format_size(file_size)})')
         
+        st.divider()
+        
+        # 사이드바의 초기화 버튼
         if st.button("🗑️ 모든 파일 지우기", use_container_width=True, type="primary"):
-            reset_all_states()
+            st.session_state.upload_counter = st.session_state.get('upload_counter', 0) + 1
+            st.session_state.uploaded_files = []
+            st.session_state.cover_images = []
+            st.session_state.converted_files = []
+            st.session_state.conversion_complete = False
+            st.session_state.size_error = False
             st.rerun()
     else:
         st.info("업로드된 파일이 없습니다.")
@@ -631,58 +650,99 @@ col1, col2 = st.columns([2, 1])
 with col1:
     st.subheader("📂 TXT 파일 업로드")
     
-    uploader_key = f"file_uploader_{len(st.session_state.uploaded_files)}"
-    uploaded_files = st.file_uploader(
+    # 파일 업로더 (매번 새로운 키 사용)
+    upload_key = f"file_uploader_{st.session_state.get('upload_counter', 0)}"
+    new_files = st.file_uploader(
         "TXT 파일을 드래그하거나 클릭하여 업로드하세요 (여러 파일 선택 가능)",
         type=["txt"],
         accept_multiple_files=True,
-        key=uploader_key,
+        key=upload_key,
         help=f"파일당 최대 {format_size(MAX_FILE_SIZE)}까지 업로드 가능합니다."
     )
     
-    if uploaded_files:
-        valid_files = []
-        invalid_files = []
-        total_size = 0
+    # 업로드 카운터 초기화
+    if 'upload_counter' not in st.session_state:
+        st.session_state.upload_counter = 0
+    
+    # 현재 파일 목록 초기화
+    if 'uploaded_files' not in st.session_state:
+        st.session_state.uploaded_files = []
+    if 'cover_images' not in st.session_state:
+        st.session_state.cover_images = []
+    if 'size_error' not in st.session_state:
+        st.session_state.size_error = False
+    
+    # 새 파일이 업로드되었을 때 처리
+    if new_files and len(new_files) > 0:
+        # 기존 파일 목록
+        current_files = st.session_state.uploaded_files.copy()
+        current_names = {f.name for f in current_files}
         
-        for file in uploaded_files:
+        # 새 파일 처리
+        valid_new_files = []
+        for file in new_files:
             file_size = len(file.getvalue())
-            if file_size <= MAX_FILE_SIZE:
-                valid_files.append(file)
-                total_size += file_size
+            
+            # 파일당 용량 체크 (200MB)
+            if file_size > MAX_FILE_SIZE:
+                st.error(f"❌ {file.name}: 파일당 최대 용량 초과 ({format_size(file_size)} / 200MB)")
             else:
-                invalid_files.append((file.name, file_size))
+                # 중복 체크 (같은 이름의 파일이 있으면 교체)
+                if file.name in current_names:
+                    # 기존 파일 제거
+                    current_files = [f for f in current_files if f.name != file.name]
+                valid_new_files.append(file)
         
+        # 모든 파일 합치기
+        all_files = current_files + valid_new_files
+        
+        # 전체 용량 계산
+        total_size = 0
+        for file in all_files:
+            total_size += len(file.getvalue())
+        
+        # 전체 용량 체크 (1GB)
         if total_size > MAX_TOTAL_SIZE:
-            st.error(f"❌ 전체 용량이 초과되었습니다. ({format_size(total_size)} / {format_size(MAX_TOTAL_SIZE)})")
-            valid_files = []
-        
-        if invalid_files:
-            for name, size in invalid_files:
-                st.error(f"❌ {name}: 용량 초과 ({format_size(size)} / {format_size(MAX_FILE_SIZE)})")
-        
-        if valid_files:
-            unique_files = []
-            seen_names = set()
-            for file in valid_files:
-                if file.name not in seen_names:
-                    unique_files.append(file)
-                    seen_names.add(file.name)
+            st.error(f"❌ 전체 용량이 최대치(1GB)를 초과했습니다. ({format_size(total_size)} / 1GB)")
+            st.warning("1GB를 초과하면 변환할 수 없습니다. 파일을 줄여주세요.")
+            st.session_state.size_error = True
             
-            if len(unique_files) != len(valid_files):
-                st.warning(f"⚠️ 중복된 파일명이 제거되었습니다. ({len(valid_files)} → {len(unique_files)})")
-            
-            if len(unique_files) != len(st.session_state.uploaded_files):
-                st.session_state.uploaded_files = unique_files
-                st.session_state.cover_images = [None] * len(unique_files)  # 표지 배열 초기화
-                st.session_state.conversion_complete = False
+            if st.button("🗑️ 초기화", key=f"reset_{st.session_state.upload_counter}"):
+                st.session_state.upload_counter += 1
+                st.session_state.uploaded_files = []
+                st.session_state.cover_images = []
+                st.session_state.size_error = False
                 st.rerun()
+        
+        elif total_size <= MAX_TOTAL_SIZE and valid_new_files:
+            # 용량이 정상일 때 저장
+            st.session_state.uploaded_files = all_files
+            # 표지 배열 크기 조정
+            st.session_state.cover_images = [None] * len(all_files)
+            st.session_state.upload_counter += 1
+            st.session_state.size_error = False
+            st.success(f"✅ {len(valid_new_files)}개 파일 추가됨 (총 {len(all_files)}개)")
+            st.rerun()
 
 with col2:
     st.subheader("🖼️ 표지 설정")
     st.markdown("각 파일마다 다른 표지를 지정할 수 있습니다.")
     
+    # cover_images가 없으면 초기화
+    if 'cover_images' not in st.session_state:
+        st.session_state.cover_images = []
+    
     if st.session_state.uploaded_files:
+        # 첫 번째 표지 일괄 적용 체크박스
+        apply_first_cover_all = st.checkbox(
+            "📌 첫 번째 표지를 모든 파일에 적용",
+            value=False,
+            key="apply_first_cover",
+            help="체크하면 첫 번째 파일에 업로드한 표지 이미지가 모든 TXT 파일의 표지로 사용됩니다."
+        )
+        
+        st.divider()
+        
         # 각 파일별 표지 업로드 UI
         cover_images = []
         
@@ -690,74 +750,75 @@ with col2:
             for idx, file in enumerate(st.session_state.uploaded_files):
                 st.markdown(f"**{idx + 1}. {file.name[:30]}**")
                 
-                # 이전에 업로드된 표지가 있으면 표시
-                cover_key = f"cover_{idx}_{file.name}"
-                cover_file = st.file_uploader(
-                    f"표지 이미지",
-                    type=ALLOWED_IMAGE_TYPES,
-                    key=cover_key,
-                    label_visibility="collapsed"
-                )
+                # 표지 업로드 UI (첫 번째 파일만 표시하거나, 체크박스 해제 시 모두 표시)
+                show_uploader = not apply_first_cover_all or idx == 0
                 
-                if cover_file:
-                    cover_images.append(cover_file)
-                    # 미리보기
-                    st.image(cover_file, width=100, caption=f"표지 {idx + 1}")
+                if show_uploader:
+                    cover_key = f"cover_{idx}_{file.name}"
+                    cover_file = st.file_uploader(
+                        f"표지 이미지",
+                        type=ALLOWED_IMAGE_TYPES,
+                        key=cover_key,
+                        label_visibility="collapsed"
+                    )
+                    
+                    if cover_file:
+                        cover_images.append(cover_file)
+                        # 미리보기
+                        st.image(cover_file, width=100, caption=f"표지 {idx + 1}")
+                    else:
+                        # 기존 표지 유지 또는 None
+                        if idx < len(st.session_state.cover_images):
+                            cover_images.append(st.session_state.cover_images[idx])
+                        else:
+                            cover_images.append(None)
                 else:
-                    # 기존 표지 유지 또는 None
-                    if idx < len(st.session_state.cover_images):
-                        cover_images.append(st.session_state.cover_images[idx])
+                    # 첫 번째 표지가 있으면 그 표지를 모든 파일에 적용
+                    if st.session_state.cover_images and st.session_state.cover_images[0]:
+                        cover_images.append(st.session_state.cover_images[0])
+                        if idx == 1:  # 첫 번째 이후 파일에만 안내 메시지 표시
+                            st.info(f"✅ 첫 번째 표지가 모든 파일에 적용됩니다")
                     else:
                         cover_images.append(None)
-                
-                st.divider()
+                        if idx == 1:
+                            st.info("첫 번째 파일에 표지를 업로드하면 모든 파일에 적용됩니다")
         
         # 표지 배열 업데이트
-        if cover_images:
+        if cover_images and len(cover_images) == len(st.session_state.uploaded_files):
             st.session_state.cover_images = cover_images
         
         # 표지 적용 안내
-        if any(st.session_state.cover_images):
-            st.success(f"✅ {sum(1 for c in st.session_state.cover_images if c)}개 파일에 표지가 지정되었습니다.")
+        if st.session_state.cover_images and any(st.session_state.cover_images):
+            cover_count = sum(1 for c in st.session_state.cover_images if c)
+            if apply_first_cover_all and cover_count > 0:
+                st.success(f"✅ 모든 파일에 첫 번째 표지가 적용됩니다.")
+            else:
+                st.success(f"✅ {cover_count}개 파일에 표지가 지정되었습니다.")
         else:
             st.info("표지 없이 변환합니다.")
     else:
         st.info("먼저 TXT 파일을 업로드해주세요.")
 
 # 변환 버튼 및 실행
-if st.session_state.uploaded_files:
-    st.divider()
-    
-    col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
-    with col_btn2:
-        convert_button = st.button(
-            "🔮 EPUB 변환 시작",
-            type="primary",
-            use_container_width=True
-        )
-    
-    if convert_button:
-        with st.spinner("📚 EPUB 변환 중..."):
-            files_data = [(f.name, f.getvalue()) for f in st.session_state.uploaded_files]
-            
-            converted = convert_all_files(
-                files_data,
-                st.session_state.cover_images,
-                use_chapter_split,
-                selected_font
-            )
-            
-            if converted:
-                st.session_state.converted_files = converted
-                st.session_state.conversion_complete = True
+if st.session_state.uploaded_files and len(st.session_state.uploaded_files) > 0:
+    if st.session_state.get('size_error', False):
+        st.divider()
+        st.warning("⚠️ 전체 용량이 1GB를 초과하여 변환할 수 없습니다.")
+    else:
+        st.divider()
+        col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+        with col_btn2:
+            convert_button = st.button("🔮 EPUB 변환 시작", type="primary", use_container_width=True)
+        
+        if convert_button:
+            with st.spinner("📚 EPUB 변환 중..."):
+                files_data = [(f.name, f.getvalue()) for f in st.session_state.uploaded_files]
+                converted = convert_all_files(files_data, st.session_state.cover_images, use_chapter_split, selected_font)
                 
-                st.markdown(f'''
-                <div class="success-box">
-                    ✨ {len(converted)}개 파일 변환 완료!
-                </div>
-                ''', unsafe_allow_html=True)
-                
-                st.rerun()
+                if converted:
+                    st.session_state.converted_files = converted
+                    st.session_state.conversion_complete = True
+                    st.rerun()
 
 # 변환 완료 후 다운로드 섹션
 if st.session_state.get('conversion_complete', False) and st.session_state.converted_files:
@@ -765,44 +826,50 @@ if st.session_state.get('conversion_complete', False) and st.session_state.conve
     
     st.subheader("📥 다운로드")
     
-    download_option = st.radio(
-        "다운로드 방식 선택",
-        ["개별 파일 다운로드", "ZIP 파일로 한번에 다운로드"],
-        horizontal=True
-    )
+    converted_count = len(st.session_state.converted_files)
     
-    if download_option == "개별 파일 다운로드":
-        cols = st.columns(3)
-        for idx, (safe_title, epub_data) in enumerate(st.session_state.converted_files):
-            with cols[idx % 3]:
-                file_size = len(epub_data.getvalue())
-                display_title = safe_title[:15] + "..." if len(safe_title) > 15 else safe_title
-                st.download_button(
-                    label=f"📕 {display_title}.epub ({format_size(file_size)})",
-                    data=epub_data,
-                    file_name=f"{safe_title}.epub",
-                    mime="application/epub+zip",
-                    use_container_width=True,
-                    key=f"download_{idx}"
-                )
+    if converted_count == 1:
+        # 파일이 1개일 때는 개별 다운로드
+        st.info("📕 1개 파일이 변환되었습니다.")
+        
+        safe_title, epub_data = st.session_state.converted_files[0]
+        file_size = len(epub_data.getvalue())
+        
+        st.download_button(
+            label=f"📕 {safe_title}.epub 다운로드 ({format_size(file_size)})",
+            data=epub_data,
+            file_name=f"{safe_title}.epub",
+            mime="application/epub+zip",
+            use_container_width=True,
+            key="download_single"
+        )
     else:
+        # 파일이 여러 개일 때는 ZIP으로만 다운로드
+        st.info(f"📦 총 {converted_count}개 파일이 변환되었습니다. ZIP 파일로 일괄 다운로드됩니다.")
+        
+        # ZIP 파일 생성
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             for safe_title, epub_data in st.session_state.converted_files:
                 zf.writestr(f"{safe_title}.epub", epub_data.getvalue())
         
-        total_files = len(st.session_state.converted_files)
-        total_size = zip_buffer.tell()
+        zip_size = zip_buffer.tell()
         
-        st.info(f"📦 {total_files}개 파일이 ZIP으로 압축됩니다. (예상 크기: {format_size(total_size)})")
-        
+        # ZIP 파일 다운로드 버튼
         st.download_button(
-            label="📥 모든 파일 ZIP 다운로드",
+            label=f"📥 모든 파일 ZIP 다운로드 ({format_size(zip_size)})",
             data=zip_buffer.getvalue(),
             file_name="converted_epubs.zip",
             mime="application/zip",
-            use_container_width=True
+            use_container_width=True,
+            key="download_zip"
         )
+        
+        # 파일 목록 표시 (참고용)
+        with st.expander("📋 변환된 파일 목록"):
+            for i, (safe_title, epub_data) in enumerate(st.session_state.converted_files, 1):
+                file_size = len(epub_data.getvalue())
+                st.text(f"{i}. {safe_title}.epub ({format_size(file_size)})")
 
 if st.session_state.uploaded_files and not st.session_state.get('conversion_complete', False):
     st.info("👆 'EPUB 변환 시작' 버튼을 클릭하여 변환을 시작하세요.")
@@ -815,8 +882,10 @@ with st.expander("📖 사용 방법 안내"):
     1. **TXT 파일 업로드**
        - 파일을 드래그 앤 드롭하거나 클릭하여 선택
        - 여러 파일 동시 업로드 가능 (파일당 최대 200MB)
+       - 파일 최대 용향 1GB를 넘어가면 변환안됨
     
     2. **표지 설정** (선택사항)
+       - 첫 번째 표지를 모든 파일에 지정 가능
        - 각 파일마다 다른 표지 이미지 지정 가능
        - JPG, JPEG, PNG 형식 지원
        - 표지를 지정하지 않은 파일은 표지 없이 생성
@@ -825,7 +894,7 @@ with st.expander("📖 사용 방법 안내"):
        - 모든 텍스트 파일이 자동으로 UTF-8로 변환됨
     
     4. **변환 설정**
-       - 자동 챕터 분할: 텍스트에서 챕터를 자동으로 감지
+       - 자동 챕터 분할 : 텍스트에서 챕터를 자동으로 감지
        - 리디바탕 폰트 자동 포함
     
     5. **변환 및 다운로드**
